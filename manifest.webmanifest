@@ -1,0 +1,25 @@
+{
+  "name": "KinoMind — что посмотреть",
+  "short_name": "KinoMind",
+  "description": "Поиск фильмов и сериалов по рейтингам Кинопоиска и IMDb, умные рекомендации и списки для всей семьи.",
+  "lang": "ru",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "background_color": "#07080C",
+  "theme_color": "#07080C",
+  "categories": ["entertainment", "lifestyle"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Удиви меня", "short_name": "Удиви", "url": "./#/home?surprise=1", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Моя библиотека", "short_name": "Библиотека", "url": "./#/library", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Поиск", "short_name": "Поиск", "url": "./#/search", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

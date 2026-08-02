@@ -1,0 +1,9 @@
+{
+ "build": "651a3afa22f1",
+ "at": "2026-08-02T09:49:06Z",
+ "files": [
+  "index.html",
+  "sw.js",
+  "manifest.webmanifest"
+ ]
+}
