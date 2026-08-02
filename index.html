@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=5">
 <meta name="theme-color" content="#07080C">
-<meta name="km-build" content="b581ff4e7dc4">
+<meta name="km-build" content="61348fc126f7">
 <meta name="description" content="KinoMind — поиск лучших фильмов и сериалов по рейтингам Кинопоиска и IMDb, умные рекомендации, свои списки и профили для всей семьи.">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1412,10 +1412,17 @@ sSet(KEY,JSON.stringify(DB));
    работает полностью локально, как раньше.
    ================================================================ */
 const SYNC={busy:false,state:'off',msg:'',timer:null,replace:false};
+/* Адрес нашего сервера. Приложение умеет жить не только на нём: его можно
+   открыть с зеркала (GitHub Pages) или просто файлом с диска — сервер всё равно
+   остаётся тот же, и синхронизация, Кинопоиск и ИИ продолжают работать. */
+const HOME_SERVER='https://kinomind.pbelyaev12.workers.dev';
 function syncBase(){
   if(DB.sync&&DB.sync.url) return DB.sync.url.replace(/\/+$/,'');
-  if(location.protocol==='http:'||location.protocol==='https:') return location.origin;
-  return '';
+  if(location.protocol==='http:'||location.protocol==='https:'){
+    if(/(^|\.)github\.io$/.test(location.hostname)) return HOME_SERVER;
+    return location.origin;
+  }
+  return HOME_SERVER;
 }
 function syncOn(){ return !!(DB.sync&&DB.sync.code&&syncBase()) }
 function syncSoon(){
