@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=5">
 <meta name="theme-color" content="#07080C">
-<meta name="km-build" content="1c01cfc20edb">
+<meta name="km-build" content="2cd6e7703d79">
 <meta name="description" content="KinoMind — поиск лучших фильмов и сериалов по рейтингам Кинопоиска и IMDb, умные рекомендации, свои списки и профили для всей семьи.">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1097,6 +1097,21 @@ button.chip.solid:hover{background:rgba(255,95,69,.34);border-color:rgba(255,150
   .act-y{width:38px;font-size:11.5px}
   .act-p{width:32px;height:48px}
 }
+
+
+/* ============================ Библиотека: компактнее ============================ */
+.stats-sm{grid-template-columns:repeat(3,1fr);gap:8px;margin:14px 0 4px}
+.stats-sm .stat{padding:9px 12px;display:flex;align-items:baseline;gap:7px}
+.stats-sm .stat b{font-size:19px;letter-spacing:-.02em;line-height:1.1}
+.stats-sm .stat span{font-size:11.5px;margin:0;line-height:1.2}
+@media (max-width:560px){
+  .stats-sm{gap:6px;margin:12px 0 2px}
+  .stats-sm .stat{padding:7px 9px;gap:5px;border-radius:12px}
+  .stats-sm .stat b{font-size:16px}
+  .stats-sm .stat span{font-size:10px}
+}
+.lib-empty{font-size:13.5px;color:var(--dim);line-height:1.55;padding:14px 16px;border-radius:14px;
+  border:1px dashed var(--stroke-2);background:rgba(255,255,255,.02)}
 </style>
 </head>
 <body>
@@ -2141,34 +2156,61 @@ function duoPartner(){
   if(!rest.length) return null;
   return rest.find(x=>x.id===DEV.duo)||rest[0];
 }
-/* вес жанра для двоих: любим оба — высоко, спорим — штраф */
+/* С кем считаем общее. По умолчанию — со всеми, кто есть в семье: так работает
+   и вдвоём, и вчетвером. Чипами можно сузить до одного человека. */
+function duoTargets(){
+  const me=P(), rest=DB.profiles.filter(x=>x.id!==me.id);
+  if(!rest.length) return [];
+  if(DEV.duo&&DEV.duo!=='all'){ const one=rest.find(x=>x.id===DEV.duo); if(one) return [one] }
+  return rest;
+}
+function duoNames(){ return duoTargets().map(x=>x.name) }
+function duoTitle(){
+  const t=duoTargets(); if(!t.length) return 'Смотрим вместе';
+  if(t.length===1) return P().name+' + '+t[0].name;
+  return 'Смотрим все вместе';
+}
+function duoSub(){
+  const t=duoTargets(); if(!t.length) return '';
+  const all=[P().name].concat(t.map(x=>x.name));
+  return all.slice(0,-1).join(', ')+' и '+all[all.length-1];
+}
+/* вес жанра для компании: любим все — высоко, расходимся — штраф.
+   Работает и для двоих, и для любого числа человек. */
 function duoAffinity(){
-  const me=P(), pa=duoPartner(); if(!pa) return {};
-  const wa=affinity(me), wb=affinity(pa), out={};
-  Object.keys(Object.assign({},wa,wb)).forEach(g=>{
-    const x=wa[g]||0, y=wb[g]||0;
-    out[g]=(x+y)/2 - Math.abs(x-y)*0.4;
+  const t=duoTargets(); if(!t.length) return {};
+  const ws=[affinity(P())].concat(t.map(affinity));
+  const out={}, keys=new Set();
+  ws.forEach(w=>Object.keys(w).forEach(g=>keys.add(g)));
+  keys.forEach(g=>{
+    const v=ws.map(w=>w[g]||0);
+    const avg=v.reduce((a,b)=>a+b,0)/v.length;
+    const spread=Math.max(...v)-Math.min(...v);
+    out[g]=avg-spread*0.4;
   });
   return out;
 }
 /* Семена для двоих: сначала то, что оба оценили высоко, потом высокие оценки
    каждого по очереди — так подборка не съезжает во вкус кого-то одного. */
 function duoSeeds(){
-  const me=P(), pa=duoPartner(); if(!pa) return [];
+  const me=P(), t=duoTargets(); if(!t.length) return [];
+  const all=[me].concat(t);
   const fr=new Set(), has=new Set(), out=[];
   const push=f=>{ if(!f||!f.tmdb||has.has(f.id)) return;
-    if(isHidden(me,f)||isHidden(pa,f)) return;
+    if(all.some(x=>isHidden(x,f))) return;
     const k=frKey(f); if(k){ if(fr.has(k)) return; fr.add(k) }
     has.add(f.id); out.push(f) };
   duoLiked().forEach(push);
   const top=x=>Object.entries(x.ratings||{}).filter(([,v])=>v>=8)
     .map(([id])=>byId(id)).filter(Boolean).reverse();
-  const a=top(me), b=top(pa);
-  for(let i=0;i<Math.max(a.length,b.length)&&out.length<10;i++){ push(a[i]); push(b[i]) }
+  const lists=all.map(top);
+  const max=Math.max(0,...lists.map(l=>l.length));
+  /* по кругу от каждого — чтобы подборка не съехала во вкус кого-то одного */
+  for(let i=0;i<max&&out.length<10;i++) lists.forEach(l=>push(l[i]));
   return out.slice(0,10);
 }
 async function duoFetch(page){
-  const me=P(), pa=duoPartner(); if(!pa) return [];
+  const me=P(); if(!duoTargets().length) return [];
   const w=duoAffinity();
   const nov=novDi(me);
   const ids=Object.entries(w).filter(([,v])=>v>0.25).sort((a,b)=>b[1]-a[1])
@@ -2195,39 +2237,54 @@ async function duoFetch(page){
 }
 /* ранжирование для двоих: пропускаем всё, что видел или спрятал любой из них */
 function rankDuo(list,st){
-  const me=P(), pa=duoPartner(); if(!pa) return [];
-  const skip=new Set([].concat(me.lists.seen||[],pa.lists.seen||[],
-    Object.keys(me.ratings||{}),Object.keys(pa.ratings||{})));
-  const seenFr=Object.assign({},seenFrMap(pa));
-  Object.entries(seenFrMap(me)).forEach(([k,v])=>seenFr[k]=(seenFr[k]||0)+v);
+  const me=P(), t=duoTargets(); if(!t.length) return [];
+  const all=[me].concat(t);
+  const skip=new Set();
+  all.forEach(x=>{ (x.lists.seen||[]).forEach(id=>skip.add(id));
+    Object.keys(x.ratings||{}).forEach(id=>skip.add(id)) });
+  const seenFr={};
+  all.forEach(x=>Object.entries(seenFrMap(x)).forEach(([k,v])=>seenFr[k]=(seenFr[k]||0)+v));
   return rankYou(list,me,st,{w:duoAffinity(),nov:novOfD(me),seenFr,skip,
-    hidden:f=>isHidden(me,f)||isHidden(pa,f)});
+    hidden:f=>all.some(x=>isHidden(x,f))});
 }
 /* Совпадения в «посмотреть позже»: оба независимо захотели одно и то же —
    это лучший кандидат на совместный вечер, его и показываем отдельным рядом. */
 function duoBoth(){
-  const me=P(), pa=duoPartner(); if(!pa) return [];
-  const his=new Set(pa.lists.later||[]);
-  return (me.lists.later||[]).filter(id=>his.has(id))
-    .filter(id=>!(me.lists.seen||[]).includes(id)&&!(pa.lists.seen||[]).includes(id))
-    .map(byId).filter(Boolean).reverse();
+  const me=P(), t=duoTargets(); if(!t.length) return [];
+  const mine=(me.lists.later||[]);
+  const cnt={}, who={};
+  mine.forEach(id=>{ cnt[id]=1; who[id]=[me.name] });
+  t.forEach(pa=>{
+    const seen=new Set(pa.lists.seen||[]);
+    (pa.lists.later||[]).forEach(id=>{
+      if(!cnt[id]) return;                        /* нас интересует только то, что хочу и я */
+      if(seen.has(id)) return;
+      cnt[id]++; who[id].push(pa.name);
+    });
+  });
+  const mySeen=new Set(me.lists.seen||[]);
+  const ids=Object.keys(cnt).filter(id=>cnt[id]>1&&!mySeen.has(id));
+  ids.sort((a,b)=>cnt[b]-cnt[a]||mine.indexOf(b)-mine.indexOf(a));
+  return ids.map(id=>{ const f=byId(id); if(!f) return null;
+    BOTHWHO[id]=who[id]; return f }).filter(Boolean);
 }
+const BOTHWHO={};
 /* то, что оба оценили высоко */
 function duoLiked(){
-  const me=P(), pa=duoPartner(); if(!pa) return [];
+  const me=P(), t=duoTargets(); if(!t.length) return [];
   return Object.keys(me.ratings||{})
-    .filter(id=>me.ratings[id]>=7&&(pa.ratings||{})[id]>=7)
+    .filter(id=>me.ratings[id]>=7&&t.some(pa=>(pa.ratings||{})[id]>=7))
     .map(byId).filter(Boolean);
 }
 const ROWS=[
   {k:'you', t:'Для вас', fn:()=>youFetch(1)},
   {k:'duo', t:'Смотрим вместе', when:()=>DB.profiles.length>1,
-   title:()=>{const pa=duoPartner();return pa?P().name+' + '+pa.name:'Смотрим вместе'},
-   note:()=>'на пересечении ваших вкусов', fn:()=>duoFetch(1)},
-  {k:'both', t:'Оба хотим посмотреть', when:()=>DB.profiles.length>1&&duoBoth().length>0,
-   title:()=>{const pa=duoPartner();return pa?'Оба хотим посмотреть':'Общие планы'},
-   note:()=>{const pa=duoPartner();const n=duoBoth().length;
-     return n+' '+plural(n,'совпадение','совпадения','совпадений')+(pa?' · '+P().name+' и '+pa.name:'')},
+   title:()=>duoTitle(), note:()=>'на пересечении вкусов · '+duoSub(), fn:()=>duoFetch(1)},
+  {k:'both', t:'Хотим посмотреть вместе', when:()=>DB.profiles.length>1&&duoBoth().length>0,
+   title:()=>duoTargets().length===1?'Оба хотим посмотреть':'Хотим посмотреть вместе',
+   note:()=>{const n=duoBoth().length;
+     return n+' '+plural(n,'совпадение','совпадения','совпадений')+' · '+duoSub()},
+   noteOf:f=>{const w=BOTHWHO[f.id]||[];return w.length>2?'хотят '+w.length+': '+w.join(', '):w.join(' и ')},
    fn:async()=>duoBoth()},
   {k:'cinema', t:'Сейчас в кино', st:'cinema', fn:async()=>nowPlaying()},
   {k:'digital', t:'Новое в цифре', st:'digital', fn:async()=>mapList(await api('/discover/movie',
@@ -2310,15 +2367,17 @@ async function loadRow(row){
   else if(row.k==='duo'){ el.outerHTML=duoSection() }
   else { el.outerHTML=rowHTML(row.title?row.title():row.t,ROWDATA[row.k],
     {id:row.k,note:row.note?row.note():'',eager:row.k==='you'||row.k==='duo'||row.k==='cinema',
+     noteOf:row.noteOf||null,
      actions:row.k==='cinema'?regionChips():(row.k==='duo'?duoChips():'')}) }
   hydrate();
 }
 function duoChips(){
   const rest=DB.profiles.filter(x=>x.id!==P().id);
   if(rest.length<2) return '';
-  const cur=duoPartner();
-  return `<span class="seg">${rest.map(x=>
-    `<button class="seg-b ${cur&&cur.id===x.id?'on':''}" data-duo="${esc(x.id)}">${esc(x.emoji+' '+x.name)}</button>`).join('')}</span>`;
+  const all=!DEV.duo||DEV.duo==='all';
+  return `<span class="seg">
+    <button class="seg-b ${all?'on':''}" data-duo="all">👥 Все</button>
+    ${rest.map(x=>`<button class="seg-b ${!all&&DEV.duo===x.id?'on':''}" data-duo="${esc(x.id)}">${esc(x.emoji+' '+x.name)}</button>`).join('')}</span>`;
 }
 function regionChips(){
   const r=DB.region||'RU';
@@ -2419,20 +2478,22 @@ function novChipsD(p){
       `<button class="seg-b ${cur===i?'on':''}" data-novd="${i}">${l}</button>`).join('')}</span>
   </div>`;
 }
-function duoTitle(){ const pa=duoPartner(); return pa?P().name+' + '+pa.name:'Смотрим вместе' }
 function duoSection(){
   const all=ROWDATA.duo, p=P();
   const acts=duoChips()+(all&&all.length
     ?`<button class="sec-more" data-duotoggle>${DUO.expanded?'Свернуть':'Показать больше'}${ic(DUO.expanded?'left':'right')}</button>`:'');
   if(!DUO.expanded) return rowHTML(duoTitle(),all?all.slice(0,20):null,
-    {id:'duo',note:'на пересечении ваших вкусов',eager:true,actions:acts,mode:'rec'});
+    {id:'duo',note:'на пересечении вкусов · '+duoSub(),eager:true,actions:acts,mode:'rec'});
   return `<section class="sec" id="row-duo">
     <div class="sec-h"><h2 class="sec-t">${esc(duoTitle())}</h2>
-      <span class="sec-n">на пересечении ваших вкусов</span>${acts}</div>
+      <span class="sec-n">на пересечении вкусов · ${esc(duoSub())}</span>${acts}</div>
     ${novChipsD(p)}
     ${(()=>{const b2=duoBoth();return b2.length?`<div class="note" style="margin:0 0 14px">${ic('check')}<span>
-      В «посмотреть позже» у вас уже совпало ${b2.length} ${plural(b2.length,'фильм','фильма','фильмов')} —
-      они собраны отдельным рядом на главной.</span></div>`:''})()}
+      В «посмотреть позже» уже совпало ${b2.length} ${plural(b2.length,'фильм','фильма','фильмов')} —
+      они собраны отдельным рядом на главной.</span></div>`
+      :`<div class="note" style="margin:0 0 14px">${ic('info')}<span>Пока ни один фильм не оказался
+      в списке «посмотреть позже» сразу у нескольких из вас. Как только совпадёт —
+      на главной появится ряд «Хотим посмотреть вместе».</span></div>`})()}
     ${all&&all.length?`<div class="grid fade-in" id="duo-grid">${all.map((f,i)=>cardHTML(f,'',i<8,'rec')).join('')}</div>
       <div class="loadmore" id="duo-more">${duoFoot()}</div>`
       :`<div class="grid">${Array.from({length:12},skelCard).join('')}</div>`}
@@ -2511,7 +2572,7 @@ function tasteSig(p){
     (p.hide||[]).slice().sort().join('|'),(p.hideFr||[]).slice().sort().join('|'),
     'n'+(p.nov===undefined?1:p.nov),'d'+novDi(p)].join('#');
 }
-function duoSig(){ const pa=duoPartner(); return tasteSig()+'/'+(pa?tasteSig(pa):'') }
+function duoSig(){ return tasteSig()+'/'+duoTargets().map(tasteSig).join('/') }
 function bothSig(){ return duoBoth().map(f=>f.id).join(',') }
 const SIG={};
 let tasteTimer=null;
@@ -2524,6 +2585,7 @@ function tasteWatchRun(){
   if(SIG.duo&&SIG.duo!==duoSig()){ delete ROWDATA.duo; SIG.duo=null;
     DUO.page=1; DUO.done=false; DUO.empty=0; n++ }
   if(SIG.both!==undefined&&SIG.both!==bothSig()){ delete ROWDATA.both; SIG.both=bothSig(); n++ }
+  if(SIG.both===undefined&&DB.profiles.length>1&&duoBoth().length&&!ROWDATA.both) n++;
   if(!n) return;
   clearTimeout(tasteTimer);
   /* короткая пауза: пока человек ставит оценки подряд, не дёргаем базу на каждую */
@@ -2785,11 +2847,12 @@ function viewHome(){
         const html = r.k==='you' ? youSection()
           : rowHTML(r.title?r.title():r.t,ROWDATA[r.k]||null,
               {id:r.k,note:r.note?r.note():'',eager:r.k==='you'||r.k==='duo'||r.k==='cinema',
+           noteOf:r.noteOf||null,
            actions:r.k==='cinema'?regionChips():(r.k==='duo'?duoChips():'')});
         if(r.k!=='duo') return html;
-        const l=duoLiked(), pa=duoPartner();
-        return html + (l.length?rowHTML('Понравилось обоим',l,
-          {id:'duoliked',note:'вы и '+pa.name+' поставили 7 и выше'}):'');
+        const l=duoLiked();
+        return html + (l.length?rowHTML(duoTargets().length===1?'Понравилось обоим':'Понравилось всем',l,
+          {id:'duoliked',note:duoSub()+' — оценки 7 и выше'}):'');
       }).join('')}
     <div style="height:20px"></div>
   </div>`;
@@ -3296,8 +3359,9 @@ function castHTML(f){
       const inner=`<div class="cast-a" style="background:linear-gradient(150deg,hsl(${h} 40% 30%),hsl(${(h+50)%360} 45% 16%))">
         ${ph?img(ph,'w185'):esc(n.split(' ').map(x=>x[0]).slice(0,2).join(''))}</div>
         <div class="cast-n">${esc(n)}</div>${r?`<div class="cast-r">${esc(r)}</div>`:''}`;
+      /* у карточек из старого кэша нет id — тогда ищем человека по имени */
       return cid?`<button class="cast-i tap" data-go="a/${cid}">${inner}</button>`
-                :`<div class="cast-i">${inner}</div>`}).join('')}</div>
+                :`<button class="cast-i tap" data-actorname="${esc(n)}">${inner}</button>`}).join('')}</div>
     ${crew.length?`<div class="chips" style="margin-top:12px">${crew.map(c=>
       `<button class="chip chip-x solid" data-go="a/${c.id}">${esc(c.n)} <i style="font-style:normal;color:var(--dim)">· ${esc(c.job)}</i></button>`).join('')}</div>`
       :(f.dir?`<div class="note">${ic('film')}<span>Режиссёр: ${esc(f.dir)}</span></div>`:'')}`;
@@ -3463,6 +3527,15 @@ async function loadActor(id){
       roles, top:roles.slice().sort((a,b)=>b.pop-a.pop).slice(0,10).map(r=>r.f)};
   }catch(e){ ACTOR[id]={loading:false,error:true,n:''} }
   if(route.v==='actor'&&route.id===id) softRender();
+}
+async function openActorByName(name){
+  toast('Ищем «'+name+'»…',false);
+  try{
+    const r=await api('/search/person',{query:name,include_adult:false,page:1},60*24*30);
+    const per=((r&&r.results)||[])[0];
+    if(per&&per.id){ go('a/'+per.id); return }
+  }catch(e){}
+  toast('Не нашли этого человека в базе',false);
 }
 function actAge(a){
   if(!a.birth) return '';
@@ -3726,12 +3799,32 @@ function genReviews(f){
 
 /* ================================================================ БИБЛИОТЕКА */
 let libTab='later', libView='';
+/* Библиотека: три списка рядами с горизонтальной прокруткой, каждый
+   разворачивается в сетку. Так уведомления видно сразу, без долгой прокрутки. */
+const LIBOPEN={};
+function libList(me,k){
+  if(k==='rated') return Object.keys(me.ratings).map(byId).filter(Boolean)
+    .sort((a,b)=>me.ratings[b.id]-me.ratings[a.id]);
+  return (me.lists[k]||[]).map(byId).filter(Boolean).reverse();
+}
+function libSection(me,k,title,hint){
+  const items=libList(me,k), open=!!LIBOPEN[k];
+  const note=f=>k==='rated'?'Оценка: '+me.ratings[f.id]:'';
+  if(!items.length) return `<section class="sec" id="lib-${k}">
+    <div class="sec-h"><h2 class="sec-t">${title}</h2><span class="sec-n">пусто</span></div>
+    <div class="lib-empty">${esc(hint)}</div></section>`;
+  const acts=`<button class="sec-more" data-libopen="${k}">${open?'Свернуть':'Показать все'}${ic(open?'left':'right')}</button>`;
+  if(!open) return rowHTML(title,items.slice(0,24),
+    {id:'lib-'+k,note:items.length+' '+plural(items.length,'фильм','фильма','фильмов'),
+     eager:k===libTab,actions:acts,noteOf:note});
+  return `<section class="sec" id="row-lib-${k}">
+    <div class="sec-h"><h2 class="sec-t">${esc(title)}</h2>
+      <span class="sec-n">${items.length} ${plural(items.length,'фильм','фильма','фильмов')}</span>${acts}</div>
+    <div class="grid fade-in">${items.map((f,i)=>cardHTML(f,note(f),i<8)).join('')}</div>
+  </section>`;
+}
 function viewLibrary(){
   const me=P();
-  const tabs=[['later','Посмотреть позже'],['seen','Просмотрено'],['rated','Мои оценки']];
-  let items;
-  if(libTab==='rated') items=Object.keys(me.ratings).map(byId).filter(Boolean).sort((a,b)=>me.ratings[b.id]-me.ratings[a.id]);
-  else items=(me.lists[libTab]||[]).map(byId).filter(Boolean).reverse();
   const rated=Object.values(me.ratings);
   const avg=rated.length?(rated.reduce((a,b)=>a+b,0)/rated.length).toFixed(1):'—';
   const notifs=notifications(me); const unread=notifs.filter(n=>!n.read).length;
@@ -3741,10 +3834,10 @@ function viewLibrary(){
     <h1 class="h-page">Моя библиотека</h1>
     <p class="sub-page">Списки и оценки профиля «${esc(me.name)}»</p>
 
-    <div class="stats">
+    <div class="stats stats-sm">
       <div class="stat"><b>${(me.lists.seen||[]).length}</b><span>просмотрено</span></div>
-      <div class="stat"><b>${(me.lists.later||[]).length}</b><span>в списке «позже»</span></div>
-      <div class="stat"><b>${avg}</b><span>средняя оценка</span></div>
+      <div class="stat"><b>${(me.lists.later||[]).length}</b><span>в «позже»</span></div>
+      <div class="stat"><b>${avg}</b><span>средняя</span></div>
     </div>
 
     ${fam.length?`<div class="fam-row scroll-x">
@@ -3759,15 +3852,9 @@ function viewLibrary(){
       ${unrated().length?`<button class="btn btn-sm" data-quick>${ic('star')} Оценить подряд · ${unrated().length}</button>`:''}
     </div>
 
-    <div class="tabs">${tabs.map(([v,l])=>{const n=v==='rated'?Object.keys(me.ratings).length:(me.lists[v]||[]).length;
-      return `<button class="tab ${libTab===v?'on':''}" data-tab="${v}">${l}<span class="n">${n}</span></button>`}).join('')}</div>
-
-    ${items.length?`<div class="grid fade-in">${items.map((f,i)=>cardHTML(f,libTab==='rated'?'Оценка: '+me.ratings[f.id]:'',i<8)).join('')}</div>`
-      :emptyHTML('📼','Здесь пока пусто',
-        libTab==='later'?'Добавляйте фильмы кнопкой «Посмотреть позже» — они соберутся здесь.':
-        libTab==='seen'?'Отмечайте просмотренное — рекомендации станут точнее.':
-        'Оценивайте фильмы от 1 до 10 — на этом строится вся персонализация.',
-        '<button class="btn btn-p" data-go="search">Найти что посмотреть</button>')}
+    ${libSection(me,'later','Посмотреть позже','Добавляйте фильмы кнопкой «Посмотреть позже» — они соберутся здесь.')}
+    ${libSection(me,'seen','Просмотрено','Отмечайте просмотренное — рекомендации станут точнее.')}
+    ${libSection(me,'rated','Мои оценки','Оценивайте фильмы от 1 до 10 — на этом строится вся персонализация.')}
 
     <section class="sec">
       <div class="sec-h"><h2 class="sec-t">Уведомления</h2>
@@ -4936,60 +5023,43 @@ function howModal(){
   </div>`);
 }
 
-const MOODS=[['any','Что угодно','🎲'],['light','Полегче','😌'],['tense','Понапряжённее','😰'],['smart','Умное','🧠'],['family','Семейное','👨‍👩‍👧'],['short','Покороче','⏱']];
-const MOOD_G={light:['Комедия','Мелодрама','Семейный','Анимация','Приключения','Музыка'],
-  tense:['Триллер','Ужасы','Криминал','Детектив','Боевик','Военный'],
-  smart:['Драма','Фантастика','История','Документальный'],
-  family:['Семейный','Анимация','Приключения','Комедия','Фэнтези'],
-  short:['Комедия','Ужасы','Анимация']};
-let surMood='any', surCount=3, surType='movie', surPool=[], surKey='';
+let surPool=[], surPicks=[];
 const surShown=new Set();
+const SUR_MOVIES=2, SUR_TV=2;          /* два фильма и два сериала — и ничего больше */
 
 /* Найденное ИИ храним на устройстве: открыли «Удиви меня» — показываем сразу,
    без ожидания модели. Модель работает в фоне и пополняет запас. */
-const SURK='kinomind.sur.v2';
+const SURK='kinomind.sur.v3';
 let SURP=(function(){try{return JSON.parse(sGet(SURK))||{}}catch(e){return{}}})();
 const surSave=()=>sSet(SURK,JSON.stringify(SURP));
 function surBox(){
-  const k=surType+'|'+surMood;
-  if(!SURP[k]||!Array.isArray(SURP[k].items)) SURP[k]={items:[],round:0,at:0};
-  return SURP[k];
+  if(!SURP.all||!Array.isArray(SURP.all.items)) SURP.all={items:[],round:0,at:0};
+  return SURP.all;
 }
-const surBusy={};
+let surBusy=false;
 
 /* Запрос за неочевидным: высокий балл при скромной известности, без привязки
    к последним годам и со случайной страницей — чтобы каждый раз было другое. */
-function surQ(nov,page){
-  const q={sort_by:'vote_average.desc','vote_count.gte':nov>=2?200:400,
-    'vote_count.lte':nov>=2?25000:120000,'vote_average.gte':nov>=2?7:6.6,page};
-  if(surMood==='short') q['with_runtime.lte']=115;
-  if(surMood==='smart') q['vote_average.gte']=7.3;
-  return q;
-}
-async function surOne(mt,ids,nov){
-  const page=1+Math.floor(Math.random()*(nov>=2?18:8));
-  const q=Object.assign(surQ(nov,page),{with_genres:ids.join('|')});
+async function surOne(mt,ids){
+  const page=1+Math.floor(Math.random()*18);
+  const q={sort_by:'vote_average.desc','vote_count.gte':200,'vote_count.lte':25000,
+    'vote_average.gte':7,page,with_genres:ids.join('|')};
   const d=await api('/discover/'+(mt==='tv'?'tv':'movie'),q,60*6).catch(()=>null);
   return d?mapList(d,mt):[];
 }
 async function surpriseFetch(){
   const p=P();
-  const nov=Math.max(2,p.nov===undefined?1:p.nov);       /* «удиви» всегда в режиме редкого */
-  const genres=MOOD_G[surMood]||(p.fav||[]);
-  const kinds=surType==='all'?['movie','tv']:[surType];
+  const genres=(p.fav||[]);
   let out=[];
   try{
-    const parts=await Promise.all(kinds.map(mt=>
-      surOne(mt,genres.map(g=>gidOf(g,mt)).filter(Boolean),nov)));
+    const parts=await Promise.all(['movie','tv'].map(mt=>
+      surOne(mt,genres.map(g=>gidOf(g,mt)).filter(Boolean))));
     out=[].concat(...parts);
   }catch(e){}
-  if(surMood==='family') out=out.filter(x=>!(x.g||[]).some(g=>['Ужасы','Криминал','Военный'].includes(g)));
   if(out.length) return reg(out);
-  const f=MOOD_G[surMood];
-  return OFF.filter(x=>!f||x.g.some(g=>f.includes(g))).map(offItem);
+  return OFF.map(offItem);
 }
-/* Названия проверяем по TMDB пачкой, а не по очереди: раньше двенадцать
-   последовательных запросов растягивались на минуты. */
+/* Названия проверяем по TMDB пачкой, а не по очереди */
 async function resolveTitles(list,opts){
   opts=opts||{};
   const out=[], seen=new Set();
@@ -5009,7 +5079,6 @@ async function resolveTitles(list,opts){
     if(yr&&hit.y&&Math.abs(hit.y-yr)>2) return null;
     return {hit,why:String(x.why||'').slice(0,120)};
   };
-  /* шесть запросов одновременно — TMDB это спокойно переживает */
   const queue=list.slice();
   const work=async()=>{ while(queue.length){ const x=queue.shift();
     const r=await one(x).catch(()=>null);
@@ -5019,16 +5088,11 @@ async function resolveTitles(list,opts){
 }
 /* ИИ ищет то, чего человек точно не знает: у него кругозор шире любого фильтра */
 async function surAiFetch(){
-  const key=surType+'|'+surMood;
-  if(surBusy[key]||!aiOn()) return [];
-  surBusy[key]=true;
+  if(surBusy||!aiOn()) return [];
+  surBusy=true;
   try{
     const p=P(), t=aiTaste(p), box=surBox();
     box.round=(box.round||0)+1;
-    const moodTxt={any:'',light:'что-нибудь лёгкое',tense:'что-нибудь напряжённое',
-      smart:'что-нибудь умное и небанальное',family:'что-то, что можно смотреть с семьёй',
-      short:'что-нибудь короткое, до двух часов'}[surMood]||'';
-    const kind=surType==='tv'?'сериалов':surType==='all'?'фильмов и сериалов':'фильмов';
     const d=await aiJson([
       {role:'system',content:'Ты кинокритик, который знает редкое кино: фестивальное, независимое, '+
         'неанглоязычное, старое, культовое, но не попсовое. Отвечай только валидным JSON.'},
@@ -5039,13 +5103,12 @@ async function surAiFetch(){
         t.liked.length?'Ему нравилось: '+t.liked.slice(0,15).join('; '):'',
         t.seen.length?'Уже видел: '+t.seen.slice(0,30).join('; '):'',
         t.frs.length?'Знакомые франшизы: '+t.frs.slice(0,15).join('; '):'',
-        moodTxt?'Настроение: '+moodTxt+'.':'',
         'Подборка номер '+box.round+' — не повторяй то, что подошло бы для предыдущих.',
         '',
-        'Назови 18 '+kind+', которые почти наверняка станут для него открытием.',
+        'Назови 18 вещей, которые почти наверняка станут для него открытием:',
+        'ровно половину фильмов и половину сериалов.',
         'Жёсткие правила, по порядку важности:',
-        '1. ЖАНР ГЛАВНЕЕ ВСЕГО: минимум 14 из 18 — в его жанрах. Удивлять надо внутри того,',
-        '   что он любит, а не подсовывать другое кино под видом «важного».',
+        '1. ЖАНР ГЛАВНЕЕ ВСЕГО: минимум 14 из 18 — в его жанрах.',
         '2. Никаких общеизвестных хитов. «Матрица», «Начало», «Бойцовский клуб», «Интерстеллар»,',
         '   «Крёстный отец», «Зелёная миля» и подобное — категорически нельзя.',
         '3. Ничего из перечисленных франшиз и ничего из уже увиденного.',
@@ -5053,13 +5116,13 @@ async function surAiFetch(){
         '5. Только реально существующее, с точным годом.',
         '',
         'Формат: {"films":[{"title":"русское название","original":"оригинал","year":1998,'+
-        '"why":"одна короткая фраза по-русски, чем это удивит"}]}'
+        '"kind":"movie" или "tv","why":"одна короткая фраза, чем это удивит"}]}'
       ].filter(Boolean).join('\n')}],
       {temperature:1.05,max_tokens:1800,timeout:70});
     const films=(d&&d.films)||[];
     if(!films.length) return [];
     const p2=P();
-    const found=await resolveTitles(films.slice(0,20),{mt:surType});
+    const found=await resolveTitles(films.slice(0,20),{mt:'all'});
     const add=[];
     found.forEach(({hit,why})=>{
       if((p2.lists.seen||[]).includes(hit.id)||p2.ratings[hit.id]!==undefined) return;
@@ -5071,87 +5134,93 @@ async function surAiFetch(){
       reg([hit]);
       add.push({f:snap(hit),why});
     });
-    box.items=box.items.concat(add).slice(-60);
+    box.items=box.items.concat(add).slice(-80);
     box.at=Date.now();
     surSave();
     return add.map(x=>x.f&&byId(x.f.id)).filter(Boolean);
   }catch(e){ return [] }
-  finally{ surBusy[key]=false }
+  finally{ surBusy=false }
 }
 /* запас на будущее: греем в фоне, чтобы следующее нажатие было мгновенным */
 function surWarm(){
-  if(!aiOn()) return;
+  if(!aiOn()||surBusy) return;
   const box=surBox();
-  const left=box.items.filter(x=>x.f&&!surShown.has(x.f.id)).length;
-  if(left>=6||surBusy[surType+'|'+surMood]) return;
-  surAiFetch().then(l=>{ if(l.length&&$('#sur-out')) surpriseDraw() });
+  const left=box.items.filter(x=>x.f&&!surShown.has(x.f.id));
+  const mov=left.filter(x=>x.f.mt!=='tv').length, tv=left.filter(x=>x.f.mt==='tv').length;
+  if(mov>=4&&tv>=4) return;
+  surAiFetch().then(l=>{ if(l.length&&$('#sur-out')) surpriseDraw(true) });
 }
 function surCached(){
-  const box=surBox();
-  return box.items.map(x=>{
+  return surBox().items.map(x=>{
     if(!x.f) return null;
     reg([x.f]); AIW[x.f.id]={ai:true,why:x.why||''};
     return byId(x.f.id);
   }).filter(Boolean);
 }
 async function surpriseModal(reload){
-  const key=surMood+'|'+surType+'|'+P().id;
-  if(key!==surKey){ surKey=key; surPool=[] }
   const box=surBox();
   const ready=box.items.filter(x=>x.f&&!surShown.has(x.f.id)).length;
-  /* мгновенно: рисуем из запаса, а пул из базы подтягиваем следом */
   if(ready) surpriseDraw(); else renderSurprise(true);
   if(reload||!surPool.length){
     surPool=await surpriseFetch();
-    surpriseDraw(true);          /* дорисовываем, уже показанное не выкидываем */
+    surpriseDraw(true);
   }
   surWarm();
 }
-let surPicks=[];
 function surpriseDraw(keep){
   const p=P();
   const seenFr=seenFrMap(p);
   const skip=new Set([].concat(p.lists.seen||[],Object.keys(p.ratings||{})));
-  const fresh=f=>f&&!skip.has(f.id)&&!isHidden(p,f)&&!surShown.has(f.id)
-    &&!(surType!=='all'&&f.mt!==surType);
+  const fresh=f=>f&&!skip.has(f.id)&&!isHidden(p,f)&&!surShown.has(f.id);
   const w=affinity(p);
   const rank=l=>l.filter(fresh)
     .filter(f=>{const k=frKey(f); return !k||!seenFr[k]})       /* серии, которые он знает, — мимо */
     .map(f=>({f,s:recScore(f,w,p,{nov:1.3,seenFr})+Math.random()*2.2}))
     .sort((a,b)=>b.s-a.s).map(o=>o.f);
   const ai=rank(surCached()), rest=rank(surPool);
+  const isTv=f=>f.mt==='tv';
+  const take=(want,tv)=>{
+    const out=[];
+    const from=l=>{ for(let i=0;i<l.length&&out.length<want;i++){
+      if(isTv(l[i])===tv&&out.indexOf(l[i])<0){ out.push(l[i]); l.splice(i,1); i-- } } };
+    from(ai); from(rest);          /* сначала находки ИИ, потом редкое из базы */
+    return out;
+  };
   let picks=[];
-  if(keep){
-    /* повторная отрисовка того же экрана: находки ИИ держим, остальное можно заменить */
-    picks=surPicks.filter(f=>AIW[f.id]&&AIW[f.id].ai);
-    while(picks.length<surCount&&ai.length) picks.push(ai.shift());
-    surPicks.forEach(f=>{ if(picks.length<surCount&&picks.indexOf(f)<0) picks.push(f) });
+  if(keep&&surPicks.length){
+    /* повторная отрисовка того же экрана: что уже показали — не выкидываем */
+    const has=new Set(surPicks.map(f=>f.id));
+    [ai,rest].forEach(l=>{for(let i=l.length-1;i>=0;i--) if(has.has(l[i].id)) l.splice(i,1)});
+    picks=surPicks.slice();
+    const needM=SUR_MOVIES-picks.filter(f=>!isTv(f)).length;
+    const needT=SUR_TV-picks.filter(isTv).length;
+    if(needM>0) picks=picks.concat(take(needM,false));
+    if(needT>0) picks=picks.concat(take(needT,true));
+  } else {
+    picks=take(SUR_MOVIES,false).concat(take(SUR_TV,true));
   }
-  /* сначала находки ИИ — они и есть «удиви», база лишь добивает количество */
-  while(picks.length<surCount&&ai.length) picks.push(ai.shift());
-  while(picks.length<surCount&&rest.length) picks.push(rest.shift());
   surPicks=picks.slice();
   picks.forEach(f=>surShown.add(f.id));
-  renderSurprise(false,picks,ai.length);
+  renderSurprise(false,picks);
+}
+/* фильмы и сериалы показываем отдельными группами — так понятнее, что есть что */
+function surGroups(picks){
+  const mv=picks.filter(f=>f.mt!=='tv'), tv=picks.filter(f=>f.mt==='tv');
+  return [['Фильмы',mv],['Сериалы',tv]].filter(([,l])=>l.length);
 }
 function renderSurprise(spin,picks,left){
   openModal(`<div class="modal">
     <div class="modal-h"><div class="surprise-i magic" style="width:40px;height:40px;border-radius:13px">${ic('spark')}</div>
       <h3>Удиви меня</h3><button class="btn btn-ic btn-sm" data-close>${ic('x')}</button></div>
     <div class="modal-b">
-      <div class="f-lbl" style="margin-bottom:9px">Что ищем</div>
-      <div class="chips" style="margin-bottom:14px">${[['movie','🎬 Фильмы'],['tv','📺 Сериалы'],['all','🎲 И то и другое']]
-        .map(([v,l])=>`<button class="chip chip-x ${surType===v?'on':''}" data-stype="${v}">${l}</button>`).join('')}</div>
-      <div class="f-lbl" style="margin-bottom:9px">Настроение на вечер</div>
-      <div class="chips" style="margin-bottom:14px">${MOODS.map(([v,l,e])=>`<button class="chip chip-x ${surMood===v?'on':''}" data-mood="${v}">${e} ${l}</button>`).join('')}</div>
-      <div class="f-lbl" style="margin-bottom:9px">Сколько вариантов</div>
-      <div class="chips" style="margin-bottom:16px">${[1,3,5].map(n=>`<button class="chip chip-x ${surCount===n?'on':''}" data-scount="${n}">${n}</button>`).join('')}</div>
-      <div class="note" style="margin:0 0 14px">${ic('spark')}<span>Здесь всегда редкое: заезженные хиты
-        и то, что вы уже видели или знаете по франшизе, сюда не попадают.${aiOn()
-          ?(surBusy[surType+'|'+surMood]?' <b style="color:var(--a2)">ИИ подбирает ещё — появятся через несколько секунд.</b>'
-            :' ИИ добавляет свои находки — у них значок ✨.'):''}</span></div>
+      <div class="note" style="margin:0 0 14px">${ic('spark')}<span>Два фильма и два сериала, которых вы
+        почти наверняка не видели: заезженные хиты и знакомые франшизы сюда не попадают.${aiOn()
+          ?(surBusy?' <b style="color:var(--a2)">ИИ подбирает ещё — появятся через пару секунд.</b>'
+            :' Находки ИИ помечены значком ✨.'):''}</span></div>
       <div id="sur-out">${spin?`<div class="spin"><div class="spin-c"></div><div style="color:var(--muted);font-size:13.5px">Ищем что-нибудь неочевидное…</div></div>`
-        :(picks&&picks.length)?picks.map(f=>`<button class="sur-res" data-go="m/${esc(f.id)}">
+        :(picks&&picks.length)?surGroups(picks).map(([lbl,list])=>`
+          <div class="sur-lbl">${lbl}</div>
+          ${list.map(f=>`<button class="sur-res" data-go="m/${esc(f.id)}">
             <div class="poster" style="${posterStyle(f)};width:82px">
               ${posterUrl(f,'w185')?`<img src="${esc(posterUrl(f,'w185'))}" onload="this.classList.add('in')" alt="">`:''}
               <div class="ph"><b>${esc((f.t||'?')[0])}</b></div></div>
@@ -5164,7 +5233,7 @@ function renderSurprise(spin,picks,left){
                 ${f.im?`<span class="rt im"><i>IMDb</i>${f.im.toFixed(1)}</span>`:''}
                 ${!f.kp&&f.tm?`<span class="rt tm"><i>TMDB</i>${f.tm.toFixed(1)}</span>`:''}</div>
               <p>${esc(f.d||'')}</p>
-            </div></button>`).join('')
+            </div></button>`).join('')}`).join('')
         :emptyHTML('🤷','Под это настроение ничего нет','Попробуйте другой вариант.','')}</div>
     </div>
     <div class="modal-f">
@@ -5318,7 +5387,7 @@ document.addEventListener('click',e=>{
   }
 });
 document.addEventListener('click',async e=>{
-  const t=e.target.closest('[data-actf],[data-reload],[data-updclose],[data-pull],[data-mset],[data-moodgo],[data-moodclear],[data-stype],[data-novd],[data-duotoggle],[data-duomore],[data-revtr],[data-revsum],[data-hide],[data-hidefr],[data-unhide],[data-nov],[data-go],[data-toggle],[data-rate],[data-surprise],[data-mood],[data-scount],[data-reroll],[data-close],[data-prof],[data-newprof],[data-editprof],[data-delprof],[data-saveprof],[data-em],[data-col],[data-tab],[data-f],[data-reset],[data-clearq],[data-toggle-f],[data-fav],[data-savekey],[data-savekp],[data-clearkp],[data-export],[data-import],[data-wipe],[data-refresh],[data-scroll],[data-hero-dot],[data-back],[data-notif],[data-readall],[data-more],[data-expand],[data-how],[data-youtoggle],[data-youmore],[data-shot],[data-trailer],[data-lb],[data-probe],[data-savehost],[data-region],[data-syncnow],[data-synccreate],[data-syncjoin],[data-syncoff],[data-syncurl],[data-copycode],[data-libview],[data-duo],[data-iam],[data-removeperson],[data-invite],[data-unbind],[data-onb],[data-genre],[data-imp],[data-import-list],[data-quick],[data-qrate],[data-qnext],[data-quickrate],[data-coll],[data-kptest]');
+  const t=e.target.closest('[data-actorname],[data-libopen],[data-actf],[data-reload],[data-updclose],[data-pull],[data-mset],[data-moodgo],[data-moodclear],[data-stype],[data-novd],[data-duotoggle],[data-duomore],[data-revtr],[data-revsum],[data-hide],[data-hidefr],[data-unhide],[data-nov],[data-go],[data-toggle],[data-rate],[data-surprise],[data-reroll],[data-close],[data-prof],[data-newprof],[data-editprof],[data-delprof],[data-saveprof],[data-em],[data-col],[data-tab],[data-f],[data-reset],[data-clearq],[data-toggle-f],[data-fav],[data-savekey],[data-savekp],[data-clearkp],[data-export],[data-import],[data-wipe],[data-refresh],[data-scroll],[data-hero-dot],[data-back],[data-notif],[data-readall],[data-more],[data-expand],[data-how],[data-youtoggle],[data-youmore],[data-shot],[data-trailer],[data-lb],[data-probe],[data-savehost],[data-region],[data-syncnow],[data-synccreate],[data-syncjoin],[data-syncoff],[data-syncurl],[data-copycode],[data-libview],[data-duo],[data-iam],[data-removeperson],[data-invite],[data-unbind],[data-onb],[data-genre],[data-imp],[data-import-list],[data-quick],[data-qrate],[data-qnext],[data-quickrate],[data-coll],[data-kptest]');
   if(!t) return;
   const d=t.dataset;
 
@@ -5394,6 +5463,10 @@ document.addEventListener('click',async e=>{
     if(k==='apply'){ impApply(); return }
     if(k==='restart'){ IMP.step='paste'; IMP.rows=[]; importModal(); return }
     return }
+  if(d.actorname!==undefined){ openActorByName(d.actorname); return }
+  if(d.libopen!==undefined){ LIBOPEN[d.libopen]=!LIBOPEN[d.libopen]; libTab=d.libopen; softRender();
+    setTimeout(()=>{const el=$('#row-lib-'+d.libopen)||$('#lib-'+d.libopen);
+      if(el&&el.scrollIntoView) el.scrollIntoView({behavior:'smooth',block:'start'})},60); return }
   if(d.actf!==undefined){ ACTFILM=d.actf; softRender(); return }
   if(d.pull!==undefined){ updPull(); return }
   if(d.reload!==undefined){ hardReload(); return }
@@ -5401,7 +5474,7 @@ document.addEventListener('click',async e=>{
   if(d.mset!==undefined){ applyMood(d.mset); return }
   if(d.moodgo!==undefined){ moodAsk(); return }
   if(d.moodclear!==undefined){ MOODS2.res=[]; MOODS2.label=''; paint(); return }
-  if(d.stype!==undefined){ surType=d.stype; surPool=[]; surShown.clear(); surPicks=[]; surpriseModal(true); return }
+
   if(d.revtr!==undefined){ revTranslate(d.revtr); return }
   if(d.revsum!==undefined){ revDigest(d.revsum); return }
   if(d.hide!==undefined){ hideFilm(d.hide,false); return }
@@ -5442,9 +5515,7 @@ document.addEventListener('click',async e=>{
   if(d.rate!==undefined){ setRating(d.rate,+d.v); return }
   if(d.surprise!==undefined){ surShown.clear(); surPicks=[]; surpriseModal(!surPool.length); return }
   if(d.reroll!==undefined){ surPicks=[]; surpriseDraw(); surWarm();
-    if(surPool.length<8) surpriseFetch().then(l=>{surPool=l;}); return }
-  if(d.mood!==undefined){ surMood=d.mood; surPool=[]; surShown.clear(); surPicks=[]; surpriseModal(true); return }
-  if(d.scount!==undefined){ surCount=+d.scount; surpriseModal(false); return }
+    if(surPool.length<8) surpriseFetch().then(l=>{surPool=l}); return }
   if(d.close!==undefined){ closeModal(); return }
   if(d.expand!==undefined){ const el=document.getElementById(d.expand); if(el){el.classList.remove('cut');t.remove()} return }
 
@@ -5452,8 +5523,10 @@ document.addEventListener('click',async e=>{
     toast('Готово, это ваш профиль'); go('home'); render(); return }
   if(d.prof!==undefined){ setOwn(d.prof); delete ROWDATA.you; delete ROWDATA.duo; YOU.page=1; YOU.done=false;
     libView=''; toast('Теперь вы в профиле «'+P().name+'»'); render(); return }
-  if(d.duo!==undefined){ DEV.duo=d.duo; devSave(); delete ROWDATA.duo;
-    const el=$('#row-duo'); if(el){el.outerHTML=rowHTML('',null,{id:'duo'});loadRow(ROWS.find(r=>r.k==='duo'))} return }
+  if(d.duo!==undefined){ DEV.duo=d.duo; devSave();
+    delete ROWDATA.duo; delete ROWDATA.both; SIG.duo=null; SIG.both=undefined;
+    DUO.page=1; DUO.done=false; DUO.empty=0;
+    softRender(); bootHome(); return }
   if(d.libview!==undefined){ libView=(d.libview===P().id?'':d.libview); libTab='later'; softRender(); return }
   if(d.newprof!==undefined){ profModal(false); return }
   if(d.invite!==undefined){ inviteModal(); return }
