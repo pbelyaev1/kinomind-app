@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=5">
 <meta name="theme-color" content="#07080C">
-<meta name="km-build" content="1ac9702eb260">
+<meta name="km-build" content="1c01cfc20edb">
 <meta name="description" content="KinoMind — поиск лучших фильмов и сериалов по рейтингам Кинопоиска и IMDb, умные рекомендации, свои списки и профили для всей семьи.">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1058,6 +1058,45 @@ button.chip.solid:hover{background:rgba(255,95,69,.34);border-color:rgba(255,150
 .upd-x svg{width:14px;height:14px}
 @keyframes updIn{from{opacity:0;transform:translate(-50%,14px)}to{opacity:1;transform:translate(-50%,0)}}
 @media (max-width:760px){ .upd-bar{bottom:calc(78px + env(safe-area-inset-bottom))} }
+
+
+/* ============================ Экран актёра ============================ */
+.act-head{display:flex;gap:22px;align-items:flex-start;margin:0 0 26px;flex-wrap:wrap}
+.act-ph{width:168px;flex:none;aspect-ratio:2/3;border-radius:var(--r-m);overflow:hidden;
+  background:linear-gradient(150deg,#232838,#12151f);display:grid;place-items:center;
+  border:1px solid var(--stroke)}
+.act-ph img{width:100%;height:100%;object-fit:cover;opacity:0;transition:.4s}
+.act-ph img.in{opacity:1}
+.act-ph span{font-size:38px;font-weight:800;color:rgba(255,255,255,.22)}
+.act-i{flex:1;min-width:260px}
+.act-nums{display:flex;gap:16px;flex-wrap:wrap;margin:12px 0 4px;font-size:13px;color:var(--muted)}
+.act-nums b{color:var(--txt);font-weight:700;font-variant-numeric:tabular-nums}
+.act-bio{margin:12px 0 0;font-size:14px;line-height:1.65;color:#C3CADA;white-space:pre-line}
+.act-bio.cut{display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden}
+.act-list{display:grid;gap:8px}
+.act-row{display:flex;align-items:center;gap:13px;padding:9px 13px;border-radius:14px;text-align:left;
+  border:1px solid var(--stroke);background:var(--card);transition:.16s var(--ease);width:100%}
+.act-row:hover{border-color:var(--stroke-2);transform:translateX(3px)}
+.act-y{width:44px;flex:none;font-size:12.5px;color:var(--dim);font-variant-numeric:tabular-nums}
+.act-p{width:38px;height:56px;flex:none;border-radius:8px;overflow:hidden;display:grid;place-items:center;
+  background:linear-gradient(150deg,#222736,#12151f)}
+.act-p img{width:100%;height:100%;object-fit:cover;opacity:0;transition:.35s}
+.act-p img.in{opacity:1}
+.act-p i{font-style:normal;font-weight:800;color:rgba(255,255,255,.25)}
+.act-t{flex:1;min-width:0}
+.act-t b{display:block;font-size:14px;font-weight:620;line-height:1.3}
+.act-t i{display:block;font-style:normal;font-size:12.5px;color:var(--dim);margin-top:2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.act-rt{flex:none;font-size:13px;font-weight:750;font-variant-numeric:tabular-nums}
+.act-rt.hi{color:#4ADE80} .act-rt.mid{color:#FFC46B} .act-rt.lo{color:#F87171}
+.cast-i.tap{background:none;border:none;padding:0;text-align:center;cursor:pointer;transition:.16s var(--ease)}
+.cast-i.tap:hover{transform:translateY(-3px)}
+.cast-i.tap:hover .cast-n{color:var(--a2)}
+@media (max-width:560px){
+  .act-ph{width:118px}
+  .act-y{width:38px;font-size:11.5px}
+  .act-p{width:32px;height:48px}
+}
 </style>
 </head>
 <body>
@@ -1529,6 +1568,24 @@ const GENRES=GEN.map(g=>g[0]);
 const GID={}; GEN.forEach(([n,m,t])=>{GID[m]=n;if(t)GID[t]=n});
 const gidOf=(name,mt)=>{const g=GEN.find(x=>x[0]===name);return g?(mt==='tv'?g[2]:g[1]):0};
 const ST_LABEL={digital:'В цифре',cinema:'В кино',soon:'Скоро',prod:'Снимается'};
+/* Проверка статуса по дате. Раньше «Универсальный солдат» с премьерой 1999-го
+   годами висел как идущий в кино: статус один раз посчитался и остался
+   в снимке фильма. Теперь дата всегда важнее записанного статуса. */
+function stOf(f){
+  if(!f) return 'digital';
+  const st=f.st||'digital', t=today(), yr=new Date().getFullYear();
+  const rd=String(f.rd||'').slice(0,10);
+  if(st==='cinema'){
+    if(rd) return rd>=shiftDate(-4)&&rd<=t ? 'cinema' : (rd>t?'soon':'digital');
+    return (f.y&&f.y>=yr)?'cinema':'digital';
+  }
+  if(st==='soon'){
+    if(rd&&rd<=t) return rd>=shiftDate(-4)?'cinema':'digital';
+    if(!rd&&f.y&&f.y<yr) return 'digital';
+  }
+  if(st==='prod'&&f.y&&f.y<yr) return 'digital';
+  return st;
+}
 const ST_COLOR={digital:'#3ED9A4',cinema:'#FF9147',soon:'#8B5CF6',prod:'#9AA0B2'};
 
 /* ---------------------------------------------------------------- офлайн-каталог */
@@ -2146,6 +2203,15 @@ function rankDuo(list,st){
   return rankYou(list,me,st,{w:duoAffinity(),nov:novOfD(me),seenFr,skip,
     hidden:f=>isHidden(me,f)||isHidden(pa,f)});
 }
+/* Совпадения в «посмотреть позже»: оба независимо захотели одно и то же —
+   это лучший кандидат на совместный вечер, его и показываем отдельным рядом. */
+function duoBoth(){
+  const me=P(), pa=duoPartner(); if(!pa) return [];
+  const his=new Set(pa.lists.later||[]);
+  return (me.lists.later||[]).filter(id=>his.has(id))
+    .filter(id=>!(me.lists.seen||[]).includes(id)&&!(pa.lists.seen||[]).includes(id))
+    .map(byId).filter(Boolean).reverse();
+}
 /* то, что оба оценили высоко */
 function duoLiked(){
   const me=P(), pa=duoPartner(); if(!pa) return [];
@@ -2158,12 +2224,12 @@ const ROWS=[
   {k:'duo', t:'Смотрим вместе', when:()=>DB.profiles.length>1,
    title:()=>{const pa=duoPartner();return pa?P().name+' + '+pa.name:'Смотрим вместе'},
    note:()=>'на пересечении ваших вкусов', fn:()=>duoFetch(1)},
-  {k:'cinema', t:'Сейчас в кино', st:'cinema', fn:async()=>{
-      if((DB.region||'RU')==='RU') return mapList(await api('/movie/now_playing',{region:'RU'},60*6),'movie','cinema');
-      return mapList(await api('/discover/movie',{with_release_type:'2|3',
-        'release_date.gte':shiftDate(-2),'release_date.lte':today(),
-        sort_by:'popularity.desc','vote_count.gte':20},60*6),'movie','cinema');
-    }},
+  {k:'both', t:'Оба хотим посмотреть', when:()=>DB.profiles.length>1&&duoBoth().length>0,
+   title:()=>{const pa=duoPartner();return pa?'Оба хотим посмотреть':'Общие планы'},
+   note:()=>{const pa=duoPartner();const n=duoBoth().length;
+     return n+' '+plural(n,'совпадение','совпадения','совпадений')+(pa?' · '+P().name+' и '+pa.name:'')},
+   fn:async()=>duoBoth()},
+  {k:'cinema', t:'Сейчас в кино', st:'cinema', fn:async()=>nowPlaying()},
   {k:'digital', t:'Новое в цифре', st:'digital', fn:async()=>mapList(await api('/discover/movie',
       {with_release_type:'4|6','release_date.gte':shiftDate(-8),'release_date.lte':today(),
        'primary_release_date.gte':shiftDate(-20),sort_by:'popularity.desc','vote_count.gte':40},60*8),'movie','digital')},
@@ -2173,6 +2239,34 @@ const ROWS=[
       {with_origin_country:'RU',sort_by:'popularity.desc','primary_release_date.gte':shiftDate(-30)},60*12),'movie')},
   {k:'top', t:'Топ рейтинга всех времён', fn:async()=>mapList(await api('/movie/top_rated',{},60*48),'movie','digital')}
 ];
+/* Что реально идёт в прокате. Одного /movie/now_playing мало: он отдаёт
+   мировую популярность, и российские премьеры вроде «Холопа» в него не попадают.
+   Поэтому спрашиваем три раза и склеиваем: общий список, прокат по датам
+   именно для России и отдельно российское кино — иначе своё тонет в голливудском. */
+async function nowPlaying(){
+  const ru=(DB.region||'RU')==='RU';
+  const from=shiftDate(-2), to=today();
+  const q=extra=>Object.assign({with_release_type:'2|3',
+    'release_date.gte':from,'release_date.lte':to,
+    sort_by:'popularity.desc','vote_count.gte':0},ru?{region:'RU'}:{},extra||{});
+  const jobs=[
+    api('/movie/now_playing',ru?{region:'RU'}:{},60*6).then(d=>mapList(d,'movie')).catch(()=>[]),
+    api('/discover/movie',q(),60*6).then(d=>mapList(d,'movie')).catch(()=>[])
+  ];
+  if(ru) jobs.push(api('/discover/movie',q({with_origin_country:'RU'}),60*6)
+    .then(d=>mapList(d,'movie').map(x=>{x._ru=true;return x})).catch(()=>[]));
+  const parts=await Promise.all(jobs);
+  const has=new Set(), out=[];
+  /* сначала своё, потом остальное — иначе российские премьеры не видно */
+  const order=ru?[parts[2]||[],parts[1]||[],parts[0]||[]]:[parts[1]||[],parts[0]||[]];
+  order.forEach(l=>l.forEach(f=>{
+    if(!f||has.has(f.id)) return;
+    const rd=String(f.rd||'').slice(0,10);
+    if(rd&&(rd>to||rd<shiftDate(-5))) return;      /* ещё не вышло или давно сошло */
+    has.add(f.id); f.st='cinema'; out.push(f);
+  }));
+  return out.slice(0,40);
+}
 const ROWDATA={};
 const HERO={list:[],idx:0,timer:null};
 
@@ -2202,10 +2296,11 @@ async function loadRow(row){
   // персональная пересортировка
   if(row.k==='you'){ YOU.fr={}; list=rankYou(list,p,YOU) }
   else if(row.k==='duo'){ DUO.fr={}; list=rankDuo(list,DUO) }
-  else list=list.filter(f=>!(p.lists.seen||[]).includes(f.id)||row.k==='top');
-  ROWDATA[row.k]=reg(list).slice(0,(row.k==='you'||row.k==='duo')?40:20);
+  else if(row.k!=='both') list=list.filter(f=>!(p.lists.seen||[]).includes(f.id)||row.k==='top');
+  ROWDATA[row.k]=reg(list).slice(0,(row.k==='you'||row.k==='duo')?40:(row.k==='both'?30:20));
   if(row.k==='you') SIG.you=tasteSig(p);
   if(row.k==='duo') SIG.duo=duoSig();
+  if(row.k==='both') SIG.both=bothSig();
   const el=$('#row-'+row.k);
   if(!el) return;
   if(row.k==='you'){
@@ -2335,6 +2430,9 @@ function duoSection(){
     <div class="sec-h"><h2 class="sec-t">${esc(duoTitle())}</h2>
       <span class="sec-n">на пересечении ваших вкусов</span>${acts}</div>
     ${novChipsD(p)}
+    ${(()=>{const b2=duoBoth();return b2.length?`<div class="note" style="margin:0 0 14px">${ic('check')}<span>
+      В «посмотреть позже» у вас уже совпало ${b2.length} ${plural(b2.length,'фильм','фильма','фильмов')} —
+      они собраны отдельным рядом на главной.</span></div>`:''})()}
     ${all&&all.length?`<div class="grid fade-in" id="duo-grid">${all.map((f,i)=>cardHTML(f,'',i<8,'rec')).join('')}</div>
       <div class="loadmore" id="duo-more">${duoFoot()}</div>`
       :`<div class="grid">${Array.from({length:12},skelCard).join('')}</div>`}
@@ -2414,6 +2512,7 @@ function tasteSig(p){
     'n'+(p.nov===undefined?1:p.nov),'d'+novDi(p)].join('#');
 }
 function duoSig(){ const pa=duoPartner(); return tasteSig()+'/'+(pa?tasteSig(pa):'') }
+function bothSig(){ return duoBoth().map(f=>f.id).join(',') }
 const SIG={};
 let tasteTimer=null;
 function tasteWatch(){ try{ tasteWatchRun() }catch(e){} }   /* до полной загрузки — молча пропускаем */
@@ -2424,6 +2523,7 @@ function tasteWatchRun(){
   }
   if(SIG.duo&&SIG.duo!==duoSig()){ delete ROWDATA.duo; SIG.duo=null;
     DUO.page=1; DUO.done=false; DUO.empty=0; n++ }
+  if(SIG.both!==undefined&&SIG.both!==bothSig()){ delete ROWDATA.both; SIG.both=bothSig(); n++ }
   if(!n) return;
   clearTimeout(tasteTimer);
   /* короткая пауза: пока человек ставит оценки подряд, не дёргаем базу на каждую */
@@ -2537,9 +2637,11 @@ function notifications(p){
   const add=(id,i,c,t,d,w)=>{if(seen.has(id))return;seen.add(id);out.push({id,i,c,t,d,w,read:(p.read||[]).includes(id)})};
   (p.lists.later||[]).forEach(id=>{
     const f=byId(id); if(!f)return;
-    if(f.st==='cinema') add('n:cin:'+id,'🎬','#FF9147','«'+f.t+'» уже в кинотеатрах','Из вашего списка'+(f.rd?' · премьера '+dateRu(f.rd):''),'сейчас');
-    else if(f.st==='soon') add('n:soon:'+id,'📅','#8B5CF6','«'+f.t+'» выходит '+(f.rd?dateRu(f.rd):('в '+f.y)),'Напомним в день релиза','скоро');
-    else if(f.st==='prod') add('n:prod:'+id,'🎥','#9AA0B2','«'+f.t+'» ещё снимается','Дата выхода пока не объявлена','—');
+    const st=stOf(f);
+    const rd=String(f.rd||'').slice(0,10);
+    if(st==='cinema') add('n:cin:'+id,'🎬','#FF9147','«'+f.t+'» сейчас в кинотеатрах','Из вашего списка'+(rd?' · премьера '+dateRu(rd):''),'сейчас');
+    else if(st==='soon'&&rd>today()) add('n:soon:'+id,'📅','#8B5CF6','«'+f.t+'» выходит '+(rd?dateRu(rd):('в '+f.y)),'Напомним в день релиза','скоро');
+    else if(st==='prod') add('n:prod:'+id,'🎥','#9AA0B2','«'+f.t+'» ещё снимается','Дата выхода пока не объявлена','—');
     else if(f.y>=new Date().getFullYear()-1) add('n:dig:'+id,'✨','#3ED9A4','«'+f.t+'» доступен в цифре','Можно смотреть прямо сейчас','новое');
   });
   const favs=Object.entries(affinity(p)).sort((a,b)=>b[1]-a[1]).slice(0,3).map(x=>x[0]);
@@ -2602,7 +2704,7 @@ function posterHTML(f,size,eager,aiBadge,hideId){
     <div class="ph"><b>${esc(letter)}</b><em>${esc(f.t)}</em></div>
     <div class="glow"></div>
     ${rate?`<div class="kpb ${rateClass(rate)}">${rate.toFixed(1)}${lbl?'<i>tmdb</i>':''}</div>`:''}
-    ${f.st&&f.st!=='digital'?`<div class="stb" style="color:${ST_COLOR[f.st]}">${ST_LABEL[f.st]}</div>`:''}
+    ${(()=>{const st=stOf(f);return st&&st!=='digital'?`<div class="stb" style="color:${ST_COLOR[st]}">${ST_LABEL[st]}</div>`:''})()}
     ${mark?`<div class="mk">${mark}</div>`:''}
   </div>`;
 }
@@ -2647,7 +2749,7 @@ function heroHTML(){
   return `<div class="hero" id="hero" data-hero>
     <div class="hero-bg" style="${posterStyle(f)}">${img(f._b,'w1280','hero-img','',true)}</div>
     <div class="hero-c">
-      <div class="hero-tag"><span class="pulse"></span>${f.st==='cinema'?'Сейчас в кино':f.st==='soon'?'Скоро в прокате':'В тренде сегодня'}</div>
+      <div class="hero-tag"><span class="pulse"></span>${stOf(f)==='cinema'?'Сейчас в кино':stOf(f)==='soon'?'Скоро в прокате':'В тренде сегодня'}</div>
       <h1 class="hero-t">${esc(f.t)}</h1>
       <div class="hero-meta">
         ${f.kp?`<span class="rt kp"><i>КП</i>${f.kp.toFixed(1)}</span>`:''}
@@ -2960,7 +3062,9 @@ function buildDiscover(mt){
   if(mt==='movie'){
     const t=today();
     if(F.st==='digital'){p.with_release_type='4|6';p['release_date.lte']=t}
-    else if(F.st==='cinema'){p.with_release_type='2|3';p['release_date.lte']=t;p['release_date.gte']=shiftDate(-3)}
+    else if(F.st==='cinema'){p.with_release_type='2|3';p['release_date.lte']=t;p['release_date.gte']=shiftDate(-3);
+      if((DB.region||'RU')==='RU') p.region='RU';
+      p['vote_count.gte']=0}
     else if(F.st==='soon'){p['primary_release_date.gte']=t;p.sort_by='primary_release_date.asc';p['vote_count.gte']=0}
     else if(F.st==='prod'){p['primary_release_date.gte']=shiftDate(6);p.sort_by='popularity.desc';p['vote_count.gte']=0}
   }
@@ -2999,7 +3103,7 @@ async function runSearch(append){
   if(token!==SR.token) return;
   if(!items.length&&!F.q.trim()&&OFFLINE){items=offlineSearch();total=items.length}
   if(F.kp>0) items=items.filter(x=>(x.kp||0)>=F.kp);
-  if(F.st!=='all') items=items.filter(x=>!x.st||x.st===F.st||F.q.trim());
+  if(F.st!=='all') items=items.filter(x=>!x.st||stOf(x)===F.st||F.q.trim());
   reg(items);
   SR.items=append?SR.items.concat(items):items; SR.total=total; SR.pages=pages; SR.loading=false;
   paintResults();
@@ -3126,7 +3230,7 @@ function viewDetail(id){
           ${f.o&&f.o!==f.t?`<div class="det-o">${esc(f.o)}${f.tagline?' · '+esc(f.tagline):''}</div>`:(f.tagline?`<div class="det-o">${esc(f.tagline)}</div>`:'')}
           <div class="det-meta">
             ${meta.map((m,i)=>`${i?'<span style="opacity:.45">·</span>':''}<span>${esc(m)}</span>`).join('')}
-            <span class="chip chip-x" style="color:${ST_COLOR[f.st]};border-color:${ST_COLOR[f.st]}44">${ST_LABEL[f.st]||''}${f.rd?' · '+dateRu(f.rd):''}</span>
+            ${(()=>{const st=stOf(f);return `<span class="chip chip-x" style="color:${ST_COLOR[st]};border-color:${ST_COLOR[st]}44">${ST_LABEL[st]||''}${f.rd?' · '+dateRu(f.rd):''}</span>`})()}
           </div>
           <div class="det-ratings">
             ${f.kp?`<div class="rt-b kp"><b>${f.kp.toFixed(1)}</b><span>Кинопоиск${f.kpVotes?' · '+f.kpVotes.toLocaleString('ru-RU'):''}</span></div>`:''}
@@ -3168,7 +3272,7 @@ function viewDetail(id){
             ${(f.g||[]).length?`<div class="fact"><dt>Жанр</dt><dd>${esc(f.g.join(', '))}</dd></div>`:''}
             ${f.dur?`<div class="fact"><dt>${f.k==='series'?'Серия':'Длительность'}</dt><dd>${mins(f.dur)}</dd></div>`:''}
             ${f.seasons?`<div class="fact"><dt>Сезонов</dt><dd>${f.seasons}${f.eps?' · '+f.eps+' '+plural(f.eps,'серия','серии','серий'):''}</dd></div>`:''}
-            ${f.st?`<div class="fact"><dt>Статус</dt><dd style="color:${ST_COLOR[f.st]}">${ST_LABEL[f.st]}</dd></div>`:''}
+            ${f.st?(()=>{const st=stOf(f);return `<div class="fact"><dt>Статус</dt><dd style="color:${ST_COLOR[st]}">${ST_LABEL[st]}</dd></div>`})():''}
             ${f.budget?`<div class="fact"><dt>Бюджет</dt><dd>$${(f.budget/1e6).toFixed(0)} млн</dd></div>`:''}
             ${f.revenue?`<div class="fact"><dt>Сборы</dt><dd>$${(f.revenue/1e6).toFixed(0)} млн</dd></div>`:''}
             ${f.age?`<div class="fact"><dt>Возраст</dt><dd>${esc(String(f.age))}${/^\d+$/.test(String(f.age))?'+':''}</dd></div>`:''}
@@ -3183,14 +3287,20 @@ function viewDetail(id){
 function castHTML(f){
   const cast=f.cast||[];
   if(!cast.length) return `<h3 class="blk-t">В ролях</h3><div class="cast-row">${Array.from({length:6},()=>'<div class="cast-i"><div class="cast-a sk"></div><div class="sk-l"></div></div>').join('')}</div>`;
+  const crew=(f.crew||[]).filter(c=>c.id);
   return `<h3 class="blk-t">В ролях</h3>
     <div class="cast-row scroll-x">${cast.map(c=>{
       const n=typeof c==='string'?c:c.n, r=typeof c==='string'?'':c.r, ph=typeof c==='object'?c.p:null;
+      const cid=typeof c==='object'?c.id:0;
       const h=hash(n)%360;
-      return `<div class="cast-i"><div class="cast-a" style="background:linear-gradient(150deg,hsl(${h} 40% 30%),hsl(${(h+50)%360} 45% 16%))">
+      const inner=`<div class="cast-a" style="background:linear-gradient(150deg,hsl(${h} 40% 30%),hsl(${(h+50)%360} 45% 16%))">
         ${ph?img(ph,'w185'):esc(n.split(' ').map(x=>x[0]).slice(0,2).join(''))}</div>
-        <div class="cast-n">${esc(n)}</div>${r?`<div class="cast-r">${esc(r)}</div>`:''}</div>`}).join('')}</div>
-    ${f.dir?`<div class="note">${ic('film')}<span>Режиссёр: ${esc(f.dir)}</span></div>`:''}`;
+        <div class="cast-n">${esc(n)}</div>${r?`<div class="cast-r">${esc(r)}</div>`:''}`;
+      return cid?`<button class="cast-i tap" data-go="a/${cid}">${inner}</button>`
+                :`<div class="cast-i">${inner}</div>`}).join('')}</div>
+    ${crew.length?`<div class="chips" style="margin-top:12px">${crew.map(c=>
+      `<button class="chip chip-x solid" data-go="a/${c.id}">${esc(c.n)} <i style="font-style:normal;color:var(--dim)">· ${esc(c.job)}</i></button>`).join('')}</div>`
+      :(f.dir?`<div class="note">${ic('film')}<span>Режиссёр: ${esc(f.dir)}</span></div>`:'')}`;
 }
 function shotsHTML(f){
   const s=f.shots||[];
@@ -3311,6 +3421,122 @@ async function revDigest(id){
   f.revBusy=''; softRender();
 }
 
+/* ================================================================ ЭКРАН АКТЁРА
+   Всё, где человек снимался или что снял: фильмы и сериалы, роли, годы.
+   Берётся из TMDB одним запросом вместе с фильмографией. */
+const ACTOR={};
+let ACTFILM='all';
+const DEPT={Acting:'актёр',Directing:'режиссёр',Writing:'сценарист',Production:'продюсер',
+  Sound:'композитор',Camera:'оператор',Editing:'монтажёр',Art:'художник'};
+async function loadActor(id){
+  ACTOR[id]={loading:true};
+  if(route.v==='actor'&&route.id===id) softRender();
+  try{
+    const d=await api('/person/'+id,{append_to_response:'combined_credits,external_ids'},60*24*7);
+    const seen=new Set();
+    const roles=[];
+    const push=(x,role,job)=>{
+      const mt=x.media_type==='tv'?'tv':'movie';
+      const it=mapItem(x,mt);
+      if(!it||!it.t) return;
+      const key=it.id+'|'+(role||job||'');
+      if(seen.has(it.id)) {                       /* уже был — дополним роль */
+        const prev=roles.find(r=>r.f.id===it.id);
+        if(prev&&job&&prev.job&&prev.job.indexOf(job)<0) prev.job+=', '+job;
+        return;
+      }
+      seen.add(it.id);
+      roles.push({f:it,role:role||'',job:job||'',pop:x.popularity||0,
+        y:it.y||0,ep:x.episode_count||0});
+    };
+    const cc=d.combined_credits||{};
+    (cc.cast||[]).forEach(x=>push(x,x.character||'',''));
+    (cc.crew||[]).forEach(x=>push(x,'',{Director:'режиссёр',Screenplay:'сценарий',Writer:'сценарий',
+      Producer:'продюсер','Original Music Composer':'музыка','Director of Photography':'оператор'}[x.job]||x.job||''));
+    roles.forEach(r=>reg([r.f]));
+    ACTOR[id]={loading:false,
+      id, n:d.name||'', o:d.also_known_as&&d.also_known_as[0]||'',
+      ph:d.profile_path||null, bio:(d.biography||'').trim(),
+      dept:DEPT[d.known_for_department]||'',
+      birth:d.birthday||'', death:d.deathday||'', place:d.place_of_birth||'',
+      pop:d.popularity||0, imdb:(d.external_ids&&d.external_ids.imdb_id)||'',
+      roles, top:roles.slice().sort((a,b)=>b.pop-a.pop).slice(0,10).map(r=>r.f)};
+  }catch(e){ ACTOR[id]={loading:false,error:true,n:''} }
+  if(route.v==='actor'&&route.id===id) softRender();
+}
+function actAge(a){
+  if(!a.birth) return '';
+  const b=new Date(a.birth), end=a.death?new Date(a.death):new Date();
+  let y=end.getFullYear()-b.getFullYear();
+  const m=end.getMonth()-b.getMonth();
+  if(m<0||(m===0&&end.getDate()<b.getDate())) y--;
+  if(y<0||y>130) return '';
+  return a.death?y+' '+plural(y,'год','года','лет')+' на момент смерти':y+' '+plural(y,'год','года','лет');
+}
+function viewActor(id){
+  const a=ACTOR[id];
+  if(!a||a.loading) return `<div class="wrap">
+    <div class="det-back"><button class="btn btn-ic" data-back>${ic('back')}</button></div>
+    <div class="spin" style="padding:60px 0"><div class="spin-c"></div>
+      <div style="color:var(--muted);font-size:13.5px">Открываем фильмографию…</div></div></div>`;
+  if(a.error) return `<div class="wrap">
+    <div class="det-back"><button class="btn btn-ic" data-back>${ic('back')}</button></div>
+    ${emptyHTML('🙈','Не нашли этого человека','Возможно, база временно недоступна.','')}</div>`;
+
+  const list=a.roles.filter(r=>ACTFILM==='all'||(ACTFILM==='tv'?r.f.mt==='tv':r.f.mt==='movie'))
+    .slice().sort((x,y)=>(y.y||0)-(x.y||0)||y.pop-x.pop);
+  const nMovie=a.roles.filter(r=>r.f.mt==='movie').length;
+  const nTv=a.roles.filter(r=>r.f.mt==='tv').length;
+  const facts=[actAge(a),a.place].filter(Boolean);
+
+  return `<div class="wrap">
+    <div class="det-back"><button class="btn btn-ic" data-back>${ic('back')}</button></div>
+    <div class="act-head">
+      <div class="act-ph">${a.ph?img(a.ph,'w342','','',true)
+        :`<span>${esc((a.n||'?').split(' ').map(x=>x[0]).slice(0,2).join(''))}</span>`}</div>
+      <div class="act-i">
+        <h1 class="det-t">${esc(a.n)}</h1>
+        <div class="det-meta">
+          ${a.dept?`<span>${esc(a.dept)}</span>`:''}
+          ${facts.map(x=>`<span style="opacity:.45">·</span><span>${esc(x)}</span>`).join('')}
+          ${a.birth?`<span style="opacity:.45">·</span><span>${dateRu(a.birth)}${a.death?' — '+dateRu(a.death):''}</span>`:''}
+        </div>
+        <div class="act-nums">
+          <span><b>${a.roles.length}</b> ${plural(a.roles.length,'работа','работы','работ')}</span>
+          ${nMovie?`<span><b>${nMovie}</b> ${plural(nMovie,'фильм','фильма','фильмов')}</span>`:''}
+          ${nTv?`<span><b>${nTv}</b> ${plural(nTv,'сериал','сериала','сериалов')}</span>`:''}
+        </div>
+        ${a.bio?`<p class="act-bio${a.bio.length>400?' cut':''}" id="actbio">${esc(a.bio)}</p>
+          ${a.bio.length>400?`<button class="rev-more" data-expand="actbio">Читать полностью</button>`:''}`
+          :`<div class="note" style="margin:10px 0 0">${ic('info')}<span>Биографии на русском в базе нет.</span></div>`}
+      </div>
+    </div>
+
+    ${a.top.length?rowHTML('Известен по',a.top,{id:'acttop',note:'самое заметное',eager:true}):''}
+
+    <section class="sec">
+      <div class="sec-h"><h2 class="sec-t">Фильмография</h2>
+        <span class="sec-n">${list.length} ${plural(list.length,'работа','работы','работ')}</span>
+        <span class="seg" style="margin-left:auto">${[['all','Всё'],['movie','Фильмы'],['tv','Сериалы']]
+          .map(([v,l])=>`<button class="seg-b ${ACTFILM===v?'on':''}" data-actf="${v}">${l}</button>`).join('')}</span>
+      </div>
+      ${list.length?`<div class="act-list">${list.map(r=>`
+        <button class="act-row" data-go="m/${esc(r.f.id)}">
+          <span class="act-y">${r.y||'—'}</span>
+          <span class="act-p">${r.f._p?img(r.f._p,'w185'):`<i>${esc((r.f.t||'?')[0])}</i>`}</span>
+          <span class="act-t">
+            <b>${esc(r.f.t)}</b>
+            <i>${esc(r.role||r.job||(r.f.mt==='tv'?'сериал':'фильм'))}${
+              r.ep>1?' · '+r.ep+' '+plural(r.ep,'серия','серии','серий'):''}</i>
+          </span>
+          ${(r.f.kp||r.f.tm)?`<span class="act-rt ${rateClass(r.f.kp||r.f.tm)}">${(r.f.kp||r.f.tm).toFixed(1)}</span>`:''}
+        </button>`).join('')}</div>`
+        :emptyHTML('🎞','Здесь пусто','В этой категории работ не нашлось.','')}
+    </section>
+    <div style="height:24px"></div>
+  </div>`;
+}
+
 /* --- загрузка детальной карточки --- */
 async function loadDetail(id){
   const base=byId(id);
@@ -3403,7 +3629,11 @@ function mapDetail(det,mt){
     age:ageFromDetail(det,mt),
     st:statusFromDetail(det,mt),
     imdbId:(det.external_ids&&det.external_ids.imdb_id)||'',
-    cast:((det.credits&&det.credits.cast)||[]).slice(0,18).map(c=>({n:c.name,r:c.character||'',p:c.profile_path||null})),
+    cast:((det.credits&&det.credits.cast)||[]).slice(0,18).map(c=>({id:c.id,n:c.name,r:c.character||'',p:c.profile_path||null})),
+    crew:crew.filter(c=>['Director','Screenplay','Writer','Story','Original Music Composer'].includes(c.job))
+      .filter((c,i,a2)=>a2.findIndex(x=>x.id===c.id)===i).slice(0,6)
+      .map(c=>({id:c.id,n:c.name,job:{Director:'режиссёр',Screenplay:'сценарий',Writer:'сценарий',
+        Story:'история','Original Music Composer':'музыка'}[c.job]||c.job})),
     shots:((det.images&&det.images.backdrops)||[]).slice(0,14).map(b=>b.file_path),
     videos:((det.videos&&det.videos.results)||[]).filter(v=>v.site==='YouTube'&&['Trailer','Teaser','Clip','Featurette'].includes(v.type))
       .sort((a,b)=>(a.type==='Trailer'?-1:1)-(b.type==='Trailer'?-1:1))
@@ -5005,6 +5235,7 @@ function parseHash(){
   const parts=h.split('/');
   if(parts[0]==='m'&&parts[1]) return {v:'detail',id:decodeURIComponent(parts[1])};
   if(parts[0]==='p'&&parts[1]) return {v:'person',id:decodeURIComponent(parts[1])};
+  if(parts[0]==='a'&&parts[1]) return {v:'actor',id:decodeURIComponent(parts[1])};
   if(['home','search','library','profile','settings','onboard'].includes(parts[0])) return {v:parts[0],id:null};
   return {v:'home',id:null};
 }
@@ -5043,7 +5274,8 @@ function paint(){
   v.innerHTML = route.v==='home'?viewHome() : route.v==='search'?viewSearch()
     : route.v==='library'?viewLibrary() : route.v==='profile'?viewProfile()
     : route.v==='settings'?viewSettings()
-    : route.v==='person'?viewPerson(route.id) : viewDetail(route.id);
+    : route.v==='person'?viewPerson(route.id)
+    : route.v==='actor'?viewActor(route.id) : viewDetail(route.id);
   hydrate();
 }
 function softRender(){ chrome(); paint(); }
@@ -5069,6 +5301,7 @@ function render(){
   if(route.v==='home') bootHome();
   if(route.v==='search'){ SR.items=[]; F.page=1; runSearch(false) }
   if(route.v==='person') loadPerson(route.id);
+  if(route.v==='actor'&&!ACTOR[route.id]) loadActor(route.id);
   if(route.v==='detail'&&!DETAIL[route.id]) loadDetail(route.id);
   if(route.v==='detail'&&DETAIL[route.id]&&!DETAIL[route.id].cast) loadDetail(route.id);
 }
@@ -5085,7 +5318,7 @@ document.addEventListener('click',e=>{
   }
 });
 document.addEventListener('click',async e=>{
-  const t=e.target.closest('[data-reload],[data-updclose],[data-pull],[data-mset],[data-moodgo],[data-moodclear],[data-stype],[data-novd],[data-duotoggle],[data-duomore],[data-revtr],[data-revsum],[data-hide],[data-hidefr],[data-unhide],[data-nov],[data-go],[data-toggle],[data-rate],[data-surprise],[data-mood],[data-scount],[data-reroll],[data-close],[data-prof],[data-newprof],[data-editprof],[data-delprof],[data-saveprof],[data-em],[data-col],[data-tab],[data-f],[data-reset],[data-clearq],[data-toggle-f],[data-fav],[data-savekey],[data-savekp],[data-clearkp],[data-export],[data-import],[data-wipe],[data-refresh],[data-scroll],[data-hero-dot],[data-back],[data-notif],[data-readall],[data-more],[data-expand],[data-how],[data-youtoggle],[data-youmore],[data-shot],[data-trailer],[data-lb],[data-probe],[data-savehost],[data-region],[data-syncnow],[data-synccreate],[data-syncjoin],[data-syncoff],[data-syncurl],[data-copycode],[data-libview],[data-duo],[data-iam],[data-removeperson],[data-invite],[data-unbind],[data-onb],[data-genre],[data-imp],[data-import-list],[data-quick],[data-qrate],[data-qnext],[data-quickrate],[data-coll],[data-kptest]');
+  const t=e.target.closest('[data-actf],[data-reload],[data-updclose],[data-pull],[data-mset],[data-moodgo],[data-moodclear],[data-stype],[data-novd],[data-duotoggle],[data-duomore],[data-revtr],[data-revsum],[data-hide],[data-hidefr],[data-unhide],[data-nov],[data-go],[data-toggle],[data-rate],[data-surprise],[data-mood],[data-scount],[data-reroll],[data-close],[data-prof],[data-newprof],[data-editprof],[data-delprof],[data-saveprof],[data-em],[data-col],[data-tab],[data-f],[data-reset],[data-clearq],[data-toggle-f],[data-fav],[data-savekey],[data-savekp],[data-clearkp],[data-export],[data-import],[data-wipe],[data-refresh],[data-scroll],[data-hero-dot],[data-back],[data-notif],[data-readall],[data-more],[data-expand],[data-how],[data-youtoggle],[data-youmore],[data-shot],[data-trailer],[data-lb],[data-probe],[data-savehost],[data-region],[data-syncnow],[data-synccreate],[data-syncjoin],[data-syncoff],[data-syncurl],[data-copycode],[data-libview],[data-duo],[data-iam],[data-removeperson],[data-invite],[data-unbind],[data-onb],[data-genre],[data-imp],[data-import-list],[data-quick],[data-qrate],[data-qnext],[data-quickrate],[data-coll],[data-kptest]');
   if(!t) return;
   const d=t.dataset;
 
@@ -5161,6 +5394,7 @@ document.addEventListener('click',async e=>{
     if(k==='apply'){ impApply(); return }
     if(k==='restart'){ IMP.step='paste'; IMP.rows=[]; importModal(); return }
     return }
+  if(d.actf!==undefined){ ACTFILM=d.actf; softRender(); return }
   if(d.pull!==undefined){ updPull(); return }
   if(d.reload!==undefined){ hardReload(); return }
   if(d.updclose!==undefined){ const b2=$('.upd-bar'); if(b2) b2.remove(); return }
@@ -5477,6 +5711,7 @@ if(/^(127\.|localhost$)/.test(location.hostname))
     isHidden,novOf,novOfD,novDi,tasteSig,seenFrMap,youFetch,duoFetch,rankDuo,DUO,
     MOODS2,MOODSET,applyMood,moodAsk,tvInfo,parseDigestText,parseLoose,revDigest,
     IMP,impStart,aiParseList,noteChunks,pickBest,simil,SURP,surBox,surAiFetch,surpriseDraw,
+    stOf,nowPlaying,duoBoth,ACTOR,loadActor,viewActor,
     genreFit,aiTaste,ensureAiRecs,aiPicks,rateStrip,
     statusFromDetail,surpriseModal,surpriseFetch,surShown};
 
