@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=5">
 <meta name="theme-color" content="#07080C">
-<meta name="km-build" content="2cd6e7703d79">
+<meta name="km-build" content="b581ff4e7dc4">
 <meta name="description" content="KinoMind — поиск лучших фильмов и сериалов по рейтингам Кинопоиска и IMDb, умные рекомендации, свои списки и профили для всей семьи.">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -4227,7 +4227,9 @@ async function updPull(){
   try{
     const r=await fetch(base+'/api/pull');
     const j=await r.json();
-    if(j.ok&&j.skipped&&(!MYBUILD||j.build===MYBUILD)){ UPD.ok=true; UPD.msg='У вас уже последняя версия' }
+    if(j.ok&&!MYBUILD){ UPD.ok=false;
+      UPD.msg='Не могу сравнить версии: у этой сборки нет отпечатка. Обновите приложение с компьютера.' }
+    else if(j.ok&&j.skipped&&j.build===MYBUILD){ UPD.ok=true; UPD.msg='У вас уже последняя версия' }
     else if(j.ok&&j.skipped){ UPD.ok=true; UPD.msg='Свежая версия есть на сервере — перезагружаем…';
       UPD.build=j.build||UPD.build; setTimeout(hardReload,900) }
     else if(j.ok){ UPD.ok=true; UPD.msg='Новая версия приехала — перезагружаем…';
