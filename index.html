@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=5">
 <meta name="theme-color" content="#07080C">
+<meta name="km-build" content="1ac9702eb260">
 <meta name="description" content="KinoMind — поиск лучших фильмов и сериалов по рейтингам Кинопоиска и IMDb, умные рекомендации, свои списки и профили для всей семьи.">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1042,6 +1043,21 @@ button.chip.solid:hover{background:rgba(255,95,69,.34);border-color:rgba(255,150
 .imp-tag.good{color:#4ADE80;border-color:rgba(74,222,128,.3)}
 .imp-tag.bad{color:#F87171;border-color:rgba(248,113,113,.3)}
 .imp-tag.note{font-weight:500;font-style:italic}
+
+
+/* ============================ Полоска «вышло обновление» ============================ */
+.upd-bar{
+  position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom));
+  z-index:80;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 18px;
+  border-radius:16px;border:1px solid var(--stroke-2);background:rgba(14,16,23,.94);
+  backdrop-filter:blur(14px);box-shadow:0 18px 44px -18px rgba(0,0,0,.9);
+  font-size:13.5px;max-width:calc(100vw - 28px);animation:updIn .35s var(--ease)
+}
+.upd-x{width:26px;height:26px;border-radius:9px;display:grid;place-items:center;color:var(--dim)}
+.upd-x:hover{color:var(--txt);background:rgba(255,255,255,.07)}
+.upd-x svg{width:14px;height:14px}
+@keyframes updIn{from{opacity:0;transform:translate(-50%,14px)}to{opacity:1;transform:translate(-50%,0)}}
+@media (max-width:760px){ .upd-bar{bottom:calc(78px + env(safe-area-inset-bottom))} }
 </style>
 </head>
 <body>
@@ -3862,13 +3878,31 @@ async function kpSelfTest(){
   softRender();
 }
 /* Состояние обновления приложения: что за сборка живёт на сервере */
-const UPD={build:'',at:0,busy:false,msg:'',ok:false,checked:false};
+const MYBUILD=(document.querySelector('meta[name="km-build"]')||{}).content||'';
+const UPD={build:'',at:0,busy:false,msg:'',ok:false,checked:false,stale:false};
 async function updInfo(){
   const base=syncBase(); if(!base) return;
   try{ const r=await fetch(base+'/api/version'); const j=await r.json();
     UPD.build=j.build||''; UPD.at=j.at||0; UPD.checked=true;
+    /* на сервере лежит другая сборка — значит у нас на руках старая */
+    UPD.stale=!!(UPD.build&&MYBUILD&&UPD.build!==MYBUILD);
+    if(UPD.stale&&!$('.upd-bar')) updBar();
     if(route.v==='settings') softRender();
   }catch(e){}
+}
+/* Ненавязчивая полоска внизу: вышла новая версия, можно обновиться одним нажатием */
+function updBar(){
+  const el=document.createElement('div');
+  el.className='upd-bar';
+  el.innerHTML=`<span>Вышла новая версия приложения</span>
+    <button class="btn btn-sm btn-p" data-reload>Обновить</button>
+    <button class="upd-x" data-updclose>${ic('x')}</button>`;
+  document.body.appendChild(el);
+}
+function hardReload(){
+  const go=()=>location.reload(true);
+  if('caches' in window) caches.keys().then(ks=>Promise.all(ks.map(k=>caches.delete(k)))).then(go).catch(go);
+  else go();
 }
 async function updPull(){
   const base=syncBase(); if(!base||UPD.busy) return;
@@ -3876,12 +3910,11 @@ async function updPull(){
   try{
     const r=await fetch(base+'/api/pull');
     const j=await r.json();
-    if(j.ok&&j.skipped){ UPD.ok=true; UPD.msg='У вас уже последняя версия' }
+    if(j.ok&&j.skipped&&(!MYBUILD||j.build===MYBUILD)){ UPD.ok=true; UPD.msg='У вас уже последняя версия' }
+    else if(j.ok&&j.skipped){ UPD.ok=true; UPD.msg='Свежая версия есть на сервере — перезагружаем…';
+      UPD.build=j.build||UPD.build; setTimeout(hardReload,900) }
     else if(j.ok){ UPD.ok=true; UPD.msg='Новая версия приехала — перезагружаем…';
-      UPD.build=j.build||UPD.build;
-      setTimeout(()=>{ if('caches' in window) caches.keys().then(ks=>Promise.all(ks.map(k=>caches.delete(k))))
-        .then(()=>location.reload(true)); else location.reload(true) },900);
-    }
+      UPD.build=j.build||UPD.build; setTimeout(hardReload,900) }
     else { UPD.ok=false; UPD.msg=j.error||'Не удалось проверить' }
   }catch(e){ UPD.ok=false; UPD.msg='Нет связи с сервером' }
   UPD.busy=false; softRender();
@@ -4006,7 +4039,7 @@ function viewSettings(){
           <div style="flex:1;min-width:200px"><div class="t">Обновление приложения</div>
             <div class="d">Свежие сборки приезжают сами: сервер раз в пять минут смотрит,
               не появилось ли новой версии. Кнопка ниже проверяет прямо сейчас.</div></div>
-          <span class="badge-live ${UPD.build?'':'badge-off'}">${UPD.build?'сборка '+esc(UPD.build.slice(0,8)):'встроенная версия'}</span>
+          <span class="badge-live ${UPD.stale?'badge-off':''}">${UPD.stale?'есть новее':'сборка '+esc((MYBUILD||UPD.build||'—').slice(0,8))}</span>
         </div>
         <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center">
           <button class="btn btn-sm" data-pull>${ic('refresh')} ${UPD.busy?'Проверяем…':'Проверить обновление'}</button>
@@ -5052,7 +5085,7 @@ document.addEventListener('click',e=>{
   }
 });
 document.addEventListener('click',async e=>{
-  const t=e.target.closest('[data-pull],[data-mset],[data-moodgo],[data-moodclear],[data-stype],[data-novd],[data-duotoggle],[data-duomore],[data-revtr],[data-revsum],[data-hide],[data-hidefr],[data-unhide],[data-nov],[data-go],[data-toggle],[data-rate],[data-surprise],[data-mood],[data-scount],[data-reroll],[data-close],[data-prof],[data-newprof],[data-editprof],[data-delprof],[data-saveprof],[data-em],[data-col],[data-tab],[data-f],[data-reset],[data-clearq],[data-toggle-f],[data-fav],[data-savekey],[data-savekp],[data-clearkp],[data-export],[data-import],[data-wipe],[data-refresh],[data-scroll],[data-hero-dot],[data-back],[data-notif],[data-readall],[data-more],[data-expand],[data-how],[data-youtoggle],[data-youmore],[data-shot],[data-trailer],[data-lb],[data-probe],[data-savehost],[data-region],[data-syncnow],[data-synccreate],[data-syncjoin],[data-syncoff],[data-syncurl],[data-copycode],[data-libview],[data-duo],[data-iam],[data-removeperson],[data-invite],[data-unbind],[data-onb],[data-genre],[data-imp],[data-import-list],[data-quick],[data-qrate],[data-qnext],[data-quickrate],[data-coll],[data-kptest]');
+  const t=e.target.closest('[data-reload],[data-updclose],[data-pull],[data-mset],[data-moodgo],[data-moodclear],[data-stype],[data-novd],[data-duotoggle],[data-duomore],[data-revtr],[data-revsum],[data-hide],[data-hidefr],[data-unhide],[data-nov],[data-go],[data-toggle],[data-rate],[data-surprise],[data-mood],[data-scount],[data-reroll],[data-close],[data-prof],[data-newprof],[data-editprof],[data-delprof],[data-saveprof],[data-em],[data-col],[data-tab],[data-f],[data-reset],[data-clearq],[data-toggle-f],[data-fav],[data-savekey],[data-savekp],[data-clearkp],[data-export],[data-import],[data-wipe],[data-refresh],[data-scroll],[data-hero-dot],[data-back],[data-notif],[data-readall],[data-more],[data-expand],[data-how],[data-youtoggle],[data-youmore],[data-shot],[data-trailer],[data-lb],[data-probe],[data-savehost],[data-region],[data-syncnow],[data-synccreate],[data-syncjoin],[data-syncoff],[data-syncurl],[data-copycode],[data-libview],[data-duo],[data-iam],[data-removeperson],[data-invite],[data-unbind],[data-onb],[data-genre],[data-imp],[data-import-list],[data-quick],[data-qrate],[data-qnext],[data-quickrate],[data-coll],[data-kptest]');
   if(!t) return;
   const d=t.dataset;
 
@@ -5129,6 +5162,8 @@ document.addEventListener('click',async e=>{
     if(k==='restart'){ IMP.step='paste'; IMP.rows=[]; importModal(); return }
     return }
   if(d.pull!==undefined){ updPull(); return }
+  if(d.reload!==undefined){ hardReload(); return }
+  if(d.updclose!==undefined){ const b2=$('.upd-bar'); if(b2) b2.remove(); return }
   if(d.mset!==undefined){ applyMood(d.mset); return }
   if(d.moodgo!==undefined){ moodAsk(); return }
   if(d.moodclear!==undefined){ MOODS2.res=[]; MOODS2.label=''; paint(); return }
